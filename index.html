@@ -47,7 +47,7 @@ canvas{width:100%;height:180px;background:#131513;border-radius:14px;margin-top:
 </section>
 
 <section id="budgets" class="page">
-<h1>Budgets</h1><div class="card"><div class="muted">Automatisch aus den letzten 12 abgeschlossenen Monaten. 300 € Sparziel werden zuerst reserviert; alle Ausgabenbudgets zusammen bleiben innerhalb des tatsächlich gezahlten Ø-Lohns/Gehalts.</div><div id="budgetlist"></div></div>
+<h1>Budgets</h1><div class="card"><div class="muted">Fixkosten wie Wohnen und Versicherungen werden zuerst reserviert. Danach werden 300 € Sparziel zurückgelegt; nur der Rest wird auf die flexiblen Budgets verteilt.</div><div id="budgetlist"></div></div>
 </section>
 
 <section id="more" class="page">
@@ -86,11 +86,15 @@ let inc=hist.filter(x=>x.amount>0&&norm(x.cat)==='einnahmen'&&(norm(x.sub).inclu
 let exp=hist.filter(x=>x.amount<0&&normal(x)),cur=tx.filter(x=>x.date>=cm&&x.amount<0&&normal(x));
 let cats={},curcats={};exp.forEach(x=>cats[x.cat]=(cats[x.cat]||0)+Math.abs(x.amount));cur.forEach(x=>curcats[x.cat]=(curcats[x.cat]||0)+Math.abs(x.amount));
 let income=inc/12,SAVING_TARGET=300,budgetCap=Math.max(0,income-SAVING_TARGET);
-let rawBudgets=Object.keys(cats).filter(k=>cats[k]>0).map(k=>({name:k,avg:cats[k]/12,want:Math.ceil((cats[k]/12*1.05)/10)*10,spent:curcats[k]||0}));
-let rawTotal=rawBudgets.reduce((s,x)=>s+x.want,0),scale=rawTotal>budgetCap&&rawTotal>0?budgetCap/rawTotal:1;
-let budgets=rawBudgets.map(k=>({name:k.name,avg:k.avg,limit:Math.floor((k.want*scale)/10)*10,spent:k.spent})).sort((x,y)=>y.limit-x.limit);
-let allocated=budgets.reduce((s,x)=>s+x.limit,0),remainder=Math.max(0,budgetCap-allocated);
-for(let i=0;i<budgets.length&&remainder>=10;i=(i+1)%budgets.length){budgets[i].limit+=10;remainder-=10;}
+let fixedNames=['wohnen','versicherungen'];
+let rawBudgets=Object.keys(cats).filter(k=>cats[k]>0).map(k=>({name:k,avg:cats[k]/12,want:Math.ceil((cats[k]/12*1.05)/10)*10,spent:curcats[k]||0,fixed:fixedNames.some(n=>norm(k).includes(n))}));
+let fixedBudgets=rawBudgets.filter(x=>x.fixed).map(x=>({...x,limit:Math.max(x.want,Math.ceil(x.spent/10)*10)}));
+let fixedTotal=fixedBudgets.reduce((s,x)=>s+x.limit,0),flexCap=Math.max(0,budgetCap-fixedTotal);
+let flexRaw=rawBudgets.filter(x=>!x.fixed),flexWant=flexRaw.reduce((s,x)=>s+x.want,0),flexScale=flexWant>flexCap&&flexWant>0?flexCap/flexWant:1;
+let flexBudgets=flexRaw.map(x=>({...x,limit:Math.floor((x.want*flexScale)/10)*10}));
+let flexAllocated=flexBudgets.reduce((s,x)=>s+x.limit,0),remainder=Math.max(0,flexCap-flexAllocated);
+for(let i=0;i<flexBudgets.length&&remainder>=10;i=(i+1)%flexBudgets.length){flexBudgets[i].limit+=10;remainder-=10;}
+let budgets=[...fixedBudgets,...flexBudgets].map(x=>({name:x.name,avg:x.avg,limit:x.limit,spent:x.spent,fixed:x.fixed})).sort((x,y)=>y.limit-x.limit);
 let months={};hist.filter(x=>x.amount<0&&normal(x)).forEach(x=>{let k=x.date.getFullYear()+'-'+String(x.date.getMonth()+1).padStart(2,'0');months[k]=(months[k]||0)+Math.abs(x.amount)});
 let accounts=[...new Set(tx.map(x=>x.account).filter(Boolean))];
 let recurring={};exp.forEach(x=>{let k=(x.who||x.text||x.sub||'Unbekannt').trim();if(!k)return;let z=recurring[k]||(recurring[k]={sum:0,n:0});z.sum+=Math.abs(x.amount);z.n++});
