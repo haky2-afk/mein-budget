@@ -47,7 +47,7 @@ canvas{width:100%;height:180px;background:#131513;border-radius:14px;margin-top:
 </section>
 
 <section id="budgets" class="page">
-<h1>Budgets</h1><div class="card"><div class="muted">Fixkosten wie Wohnen, Versicherungen und Kredit-/Darlehensraten werden zuerst reserviert. Danach wird dein eingestelltes Sparziel zurückgelegt; nur der Rest wird auf die flexiblen Budgets verteilt.</div><div id="budgetlist"></div></div>
+<h1>Budgets</h1><div class="card"><div class="muted">Fixkosten wie Wohnen, Versicherungen und Kredit-/Darlehensraten werden zuerst reserviert. Danach wird dein Sparziel zurückgelegt. Freizeit ist auf 200 €, Lifestyle auf 150 € und Sonstiges auf 100 € begrenzt; übriges Geld landet automatisch im Puffer.</div><div id="budgetlist"></div></div>
 </section>
 
 <section id="budgetdetail" class="page">
@@ -94,6 +94,7 @@ let recurring=months>=5&&perMonth<=1.6&&(stable>=0.7||explicit);
 if(blocked)return null;if(!recurring)return null;return {name:g.name,avg:median||avg,n:g.n,months,stable:Math.round(stable*100)};}).filter(Boolean).sort((a,b)=>b.avg-a.avg).slice(0,20)
 }
 function refreshFixedCostsFromStored(){if(!D||!Array.isArray(D.tx))return;let now=new Date(),cm=new Date(now.getFullYear(),now.getMonth(),1),start=new Date(cm.getFullYear()-1,cm.getMonth(),1);let exp=D.tx.filter(x=>{let d=new Date(x.date);return d>=start&&d<cm&&Number(x.amount)<0&&!x.transfer&&!norm(x.cat).includes('sparen')&&!norm(x.sub).includes('bargeld')&&!norm(x.text).includes('bargeld')});D.fixed=detectFixedCosts(exp);localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D))}
+function applyBudgetCaps(arr,budgetCap){let caps={freizeit:200,lifestyle:150,sonstiges:100};let out=(arr||[]).filter(x=>norm(x.name)!=='puffer').map(x=>{let cap=caps[norm(x.name)],limit=Number(x.limit)||0;if(cap!=null)limit=Math.min(limit,cap);return {...x,limit}});let allocated=out.reduce((s,x)=>s+(Number(x.limit)||0),0),buffer=Math.max(0,Math.floor((budgetCap-allocated)/10)*10);if(buffer>=10)out.push({name:'Puffer',avg:0,limit:buffer,spent:0,fixed:false,fixedFloor:0,buffer:true});return out.sort((a,b)=>b.limit-a.limit)}
 function doImport(){let f=document.getElementById('file').files[0];if(!f)return alert('Bitte Finanzguru-Excel auswählen.');if(typeof XLSX==='undefined')return alert('Excel-Bibliothek konnte nicht geladen werden. Internetverbindung prüfen.');
 let r=new FileReader();r.onload=e=>{try{let w=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true}),rows=XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{defval:''});if(!rows.length)throw Error('leer');
 let a=col(rows[0],['betrag']),dt=col(rows[0],['buchungstag','datum']),cat=col(rows[0],['analyse-hauptkategorie','hauptkategorie']),sub=col(rows[0],['analyse-unterkategorie','unterkategorie']),txt=col(rows[0],['verwendungszweck']),who=col(rows[0],['beguenstigter','auftraggeber']),tr=col(rows[0],['analyse-umbuchung']),acc=col(rows[0],['name referenzkonto','referenzkonto']);
@@ -114,7 +115,7 @@ let flexWant=rawBudgets.reduce((s,x)=>s+Math.max(0,x.want-x.fixedFloor),0),flexS
 let budgets=rawBudgets.map(x=>({...x,limit:x.fixedFloor+Math.floor((Math.max(0,x.want-x.fixedFloor)*flexScale)/10)*10}));
 let allocated=budgets.reduce((s,x)=>s+x.limit,0),remainder=Math.max(0,budgetCap-allocated);
 for(let i=0;budgets.length&&remainder>=10;i=(i+1)%budgets.length){if(!budgets[i].fixed){budgets[i].limit+=10;remainder-=10}}
-budgets=budgets.map(x=>({name:x.name,avg:x.avg,limit:x.limit,spent:x.spent,fixed:x.fixed,fixedFloor:x.fixedFloor})).sort((x,y)=>y.limit-x.limit);
+budgets=applyBudgetCaps(budgets.map(x=>({name:x.name,avg:x.avg,limit:x.limit,spent:x.spent,fixed:x.fixed,fixedFloor:x.fixedFloor})),budgetCap);
 let months={};hist.filter(x=>x.amount<0&&normal(x)).forEach(x=>{let k=x.date.getFullYear()+'-'+String(x.date.getMonth()+1).padStart(2,'0');months[k]=(months[k]||0)+Math.abs(x.amount)});
 let accounts=[...new Set(tx.map(x=>x.account).filter(Boolean))];
 let fixed=detectFixedCosts(exp);
@@ -124,11 +125,11 @@ localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));document.getElement
 function recalcBudgets(target){
 if(!D)return;target=Math.max(0,Number(target)||0);let budgetCap=Math.max(0,D.income-target),fixedNames=['wohnen','versicherungen'];
 let now=new Date(),cm=new Date(now.getFullYear(),now.getMonth(),1),next=new Date(now.getFullYear(),now.getMonth()+1,1);let loanFixed=(D.tx||[]).filter(x=>{let d=new Date(x.date);return d>=cm&&d<next&&x.amount<0&&norm(x.cat)==='finanzen'&&(norm(x.sub).includes('kredit')||norm(x.sub).includes('darlehen')||norm(x.text).includes('darlehen')||norm(x.text).includes('kredit'))}).reduce((s,x)=>s+Math.abs(Number(x.amount)||0),0);
-let raw=(D.budgets||[]).map(x=>{let avg=Number(x.avg)||0,want=Math.ceil((avg*1.05)/10)*10,spent=Number(x.spent)||0,wholeFixed=x.fixed===true||fixedNames.some(n=>norm(x.name).includes(n)),floor=wholeFixed?Math.max(want,Math.ceil(spent/10)*10):(norm(x.name)==='finanzen'?Math.ceil(loanFixed/10)*10:0);return {name:x.name,avg,want,spent,fixed:wholeFixed,fixedFloor:floor}});
+let raw=(D.budgets||[]).filter(x=>norm(x.name)!=='puffer').map(x=>{let avg=Number(x.avg)||0,want=Math.ceil((avg*1.05)/10)*10,spent=Number(x.spent)||0,wholeFixed=x.fixed===true||fixedNames.some(n=>norm(x.name).includes(n)),floor=wholeFixed?Math.max(want,Math.ceil(spent/10)*10):(norm(x.name)==='finanzen'?Math.ceil(loanFixed/10)*10:0);return {name:x.name,avg,want,spent,fixed:wholeFixed,fixedFloor:floor}});
 let fixedTotal=raw.reduce((s,x)=>s+x.fixedFloor,0),flexCap=Math.max(0,budgetCap-fixedTotal),flexWant=raw.reduce((s,x)=>s+Math.max(0,x.want-x.fixedFloor),0),flexScale=flexWant>flexCap&&flexWant>0?flexCap/flexWant:1;
 let out=raw.map(x=>({...x,limit:x.fixedFloor+Math.floor((Math.max(0,x.want-x.fixedFloor)*flexScale)/10)*10}));let allocated=out.reduce((s,x)=>s+x.limit,0),rem=Math.max(0,budgetCap-allocated);
 for(let i=0;out.length&&rem>=10;i=(i+1)%out.length){if(!out[i].fixed){out[i].limit+=10;rem-=10}}
-D.budgets=out.map(x=>({name:x.name,avg:x.avg,limit:x.limit,spent:x.spent,fixed:x.fixed,fixedFloor:x.fixedFloor})).sort((a,b)=>b.limit-a.limit);D.savingTarget=target;D.budgetCap=budgetCap;localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));localStorage.setItem('mein_budget_saving_target',String(target));}
+D.budgets=applyBudgetCaps(out.map(x=>({name:x.name,avg:x.avg,limit:x.limit,spent:x.spent,fixed:x.fixed,fixedFloor:x.fixedFloor})),budgetCap);D.savingTarget=target;D.budgetCap=budgetCap;localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));localStorage.setItem('mein_budget_saving_target',String(target));}
 function saveSavingTarget(){let el=document.getElementById('savingTargetInput'),v=Number(el.value);if(!Number.isFinite(v)||v<0)return alert('Bitte ein Sparziel ab 0 € eingeben.');recalcBudgets(v);renderAll();let st=document.getElementById('savingTargetStatus');if(st)st.textContent='✅ Sparziel auf '+eur(v)+' pro Monat geändert.';}
 
 function manualContracts(){try{return JSON.parse(localStorage.getItem('mein_budget_contracts_v1')||'[]')}catch(e){return []}}
@@ -155,6 +156,7 @@ function renderTransactions(){let box=document.getElementById('txlist');if(!D){b
 function drawChart(){if(!D)return;let c=document.getElementById('chart'),ctx=c.getContext('2d'),vals=Object.entries(D.months||{}).sort().slice(-12);ctx.clearRect(0,0,c.width,c.height);if(!vals.length)return;let max=Math.max(...vals.map(x=>x[1]),1),w=c.width/vals.length;ctx.font='11px Arial';ctx.fillStyle='#aaa';vals.forEach(([m,v],i)=>{let h=v/max*125,x=i*w+8,y=145-h;ctx.fillStyle='#39df6c';ctx.fillRect(x,y,Math.max(8,w-15),h);ctx.fillStyle='#aaa';ctx.fillText(m.slice(5),x,165)})}
 function clearAll(){if(confirm('Importdaten wirklich löschen?')){localStorage.removeItem('mein_budget_pro_v1');D=null;location.reload()}}
 refreshFixedCostsFromStored();
+if(D)recalcBudgets(D.savingTarget??Number(localStorage.getItem('mein_budget_saving_target')??300));
 renderAll();
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
