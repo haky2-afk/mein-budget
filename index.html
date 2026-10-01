@@ -47,7 +47,7 @@ canvas{width:100%;height:180px;background:#131513;border-radius:14px;margin-top:
 </section>
 
 <section id="budgets" class="page">
-<h1>Budgets</h1><div class="card"><div class="muted">Automatisch aus dem Durchschnitt der letzten 12 abgeschlossenen Monate + 5 % Puffer.</div><div id="budgetlist"></div></div>
+<h1>Budgets</h1><div class="card"><div class="muted">Automatisch aus den letzten 12 abgeschlossenen Monaten. 300 € Sparziel werden zuerst reserviert; alle Ausgabenbudgets zusammen bleiben innerhalb des tatsächlich gezahlten Ø-Lohns/Gehalts.</div><div id="budgetlist"></div></div>
 </section>
 
 <section id="more" class="page">
@@ -85,19 +85,24 @@ let normal=x=>!x.transfer&&!norm(x.cat).includes('sparen')&&!norm(x.sub).include
 let inc=hist.filter(x=>x.amount>0&&norm(x.cat)==='einnahmen'&&(norm(x.sub).includes('lohn')||norm(x.sub).includes('gehalt'))).reduce((s,x)=>s+x.amount,0);
 let exp=hist.filter(x=>x.amount<0&&normal(x)),cur=tx.filter(x=>x.date>=cm&&x.amount<0&&normal(x));
 let cats={},curcats={};exp.forEach(x=>cats[x.cat]=(cats[x.cat]||0)+Math.abs(x.amount));cur.forEach(x=>curcats[x.cat]=(curcats[x.cat]||0)+Math.abs(x.amount));
-let budgets=Object.keys(cats).filter(k=>cats[k]>0).map(k=>({name:k,avg:cats[k]/12,limit:Math.ceil((cats[k]/12*1.05)/10)*10,spent:curcats[k]||0})).sort((x,y)=>y.limit-x.limit);
+let income=inc/12,SAVING_TARGET=300,budgetCap=Math.max(0,income-SAVING_TARGET);
+let rawBudgets=Object.keys(cats).filter(k=>cats[k]>0).map(k=>({name:k,avg:cats[k]/12,want:Math.ceil((cats[k]/12*1.05)/10)*10,spent:curcats[k]||0}));
+let rawTotal=rawBudgets.reduce((s,x)=>s+x.want,0),scale=rawTotal>budgetCap&&rawTotal>0?budgetCap/rawTotal:1;
+let budgets=rawBudgets.map(k=>({name:k.name,avg:k.avg,limit:Math.floor((k.want*scale)/10)*10,spent:k.spent})).sort((x,y)=>y.limit-x.limit);
+let allocated=budgets.reduce((s,x)=>s+x.limit,0),remainder=Math.max(0,budgetCap-allocated);
+for(let i=0;i<budgets.length&&remainder>=10;i=(i+1)%budgets.length){budgets[i].limit+=10;remainder-=10;}
 let months={};hist.filter(x=>x.amount<0&&normal(x)).forEach(x=>{let k=x.date.getFullYear()+'-'+String(x.date.getMonth()+1).padStart(2,'0');months[k]=(months[k]||0)+Math.abs(x.amount)});
 let accounts=[...new Set(tx.map(x=>x.account).filter(Boolean))];
 let recurring={};exp.forEach(x=>{let k=(x.who||x.text||x.sub||'Unbekannt').trim();if(!k)return;let z=recurring[k]||(recurring[k]={sum:0,n:0});z.sum+=Math.abs(x.amount);z.n++});
 let fixed=Object.entries(recurring).filter(([k,v])=>v.n>=6).map(([name,v])=>({name,avg:v.sum/v.n,n:v.n})).sort((x,y)=>y.avg-x.avg).slice(0,15);
 let sav=hist.filter(x=>x.amount<0&&(norm(x.cat).includes('sparen')||norm(x.sub).includes('sparen'))).reduce((s,x)=>s+Math.abs(x.amount),0);
-D={tx:tx.slice(-4000),income:inc/12,incomeYear:inc,cats,curcats,budgets,months,accounts,fixed,saved:sav,start:start.toISOString(),end:cm.toISOString(),count:tx.length};
+D={tx:tx.slice(-4000),income:income,incomeYear:inc,cats,curcats,budgets,months,accounts,fixed,saved:sav,savingTarget:SAVING_TARGET,budgetCap:budgetCap,start:start.toISOString(),end:cm.toISOString(),count:tx.length};
 localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));document.getElementById('status').textContent='✅ '+tx.length+' Buchungen importiert und alle Bereiche aktualisiert.';renderAll()}catch(err){alert('Import fehlgeschlagen: '+err.message)}};r.readAsArrayBuffer(f)}
 function renderAll(){if(!D)return;let cur=Object.values(D.curcats||{}).reduce((a,b)=>a+b,0),limits=(D.budgets||[]).reduce((a,b)=>a+b.limit,0);
-document.getElementById('income').textContent=eur(D.income);document.getElementById('spend').textContent=eur(cur);document.getElementById('available').textContent=eur(Math.max(0,limits-cur))+' verfügbar';document.getElementById('saving').textContent=eur(Math.max(0,D.income-limits));document.getElementById('count').textContent=D.count;
-document.getElementById('period').textContent='Budgetrahmen '+eur(limits)+' · Lohn/Gehalt '+eur(D.income)+' Ø/Monat';
+document.getElementById('income').textContent=eur(D.income);document.getElementById('spend').textContent=eur(cur);let remaining=limits-cur;document.getElementById('available').textContent=remaining>=0?eur(remaining)+' verfügbar':eur(Math.abs(remaining))+' über Budget';document.getElementById('saving').textContent=eur(D.savingTarget??Math.max(0,D.income-limits))+' Sparziel';document.getElementById('count').textContent=D.count;
+document.getElementById('period').textContent='Budgetrahmen '+eur(limits)+' · Sparziel '+eur(D.savingTarget||0)+' · Lohn/Gehalt '+eur(D.income)+' Ø/Monat';
 let top=[...(D.budgets||[])].sort((a,b)=>b.spent-a.spent).slice(0,5);document.getElementById('topcats').innerHTML=top.map(x=>`<div class="cat"><span>${x.name}</span><b>${eur(x.spent)}</b></div>`).join('')||'<div class="empty">Noch keine Ausgaben im aktuellen Monat</div>';
-document.getElementById('budgetlist').innerHTML=(D.budgets||[]).map(x=>{let av=Math.max(0,x.limit-x.spent),pct=x.limit?Math.min(100,x.spent/x.limit*100):0;return `<div class="budget"><div class="budgetTop"><span>${x.name}</span><span>${eur(av)} frei</span></div><div class="muted">${eur(x.spent)} von ${eur(x.limit)} · Ø vorher ${eur(x.avg)}</div><div class="bar"><div class="fill" style="width:${pct}%"></div></div></div>`}).join('');
+document.getElementById('budgetlist').innerHTML=(D.budgets||[]).map(x=>{let diff=x.limit-x.spent,pct=x.limit?Math.min(100,x.spent/x.limit*100):0,status=diff>=0?eur(diff)+' frei':eur(Math.abs(diff))+' über Budget';return `<div class="budget"><div class="budgetTop"><span>${x.name}</span><span class="${diff<0?'neg':''}">${status}</span></div><div class="muted">${eur(x.spent)} von ${eur(x.limit)} · Ø vorher ${eur(x.avg)}</div><div class="bar"><div class="fill" style="width:${pct}%"></div></div></div>`}).join('');
 document.getElementById('analysisCats').innerHTML=Object.entries(D.cats||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="cat"><span>${k}</span><span>${eur(v/12)} Ø/Monat</span></div>`).join('');
 document.getElementById('fixed').innerHTML=(D.fixed||[]).map(x=>`<div class="cat"><span>${x.name}</span><b>${eur(x.avg)}</b></div>`).join('')||'<div class="empty">Keine regelmäßigen Zahlungen erkannt</div>';
 document.getElementById('accounts').innerHTML=(D.accounts||[]).map(x=>`<span class="pill">${x}</span>`).join('')||'<span class="muted">Keine Kontonamen im Export</span>';
