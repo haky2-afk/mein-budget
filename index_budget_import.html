@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070907"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon.svg"><title>Mein Budget</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070907;color:#f4f4f4;font-family:Arial,sans-serif}
+.app{max-width:760px;margin:auto;padding:18px 16px 105px}.head{display:flex;justify-content:space-between;align-items:center}
+h1{font-size:28px;margin:8px 0 16px}.card{background:#1d201e;border-radius:22px;padding:18px;margin:12px 0}
+.kicker,.muted{color:#9c9f9d}.big{font-size:30px;font-weight:800;color:#39df6c;margin:6px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#151715;border-radius:17px;padding:15px}.stat b{display:block;font-size:21px;margin-top:5px}
+.bar{height:9px;background:#454845;border-radius:10px;overflow:hidden;margin-top:9px}.fill{height:100%;background:#36dc69;border-radius:10px}
+button{border:0;border-radius:14px;padding:13px 15px;font-weight:700;font-size:16px}.primary{background:#10c9b3;color:#032d28}.secondary{background:#3c403d;color:#fff}
+input,select{width:100%;padding:13px;border:1px solid #484b49;background:#101210;color:#fff;border-radius:12px;font-size:16px;margin:5px 0}
+.row{display:flex;gap:10px;align-items:center}.grow{flex:1}.tx{padding:12px 0;border-bottom:1px solid #343735}.tx:last-child{border:0}.neg{color:#ff8585}.pos{color:#48df76}
+.cat{display:flex;justify-content:space-between;gap:12px;margin:13px 0}.contractForm{display:grid;grid-template-columns:1.4fr .8fr;gap:8px;margin-top:12px}.contractForm select,.contractForm button{grid-column:span 1}.contractRow{padding:12px 0;border-bottom:1px solid #343735}.contractRow:last-child{border:0}.contractMeta{font-size:12px;color:#9c9f9d;margin-top:3px}.dangerMini{background:#3a2020;color:#ffb3b3;padding:8px 10px;font-size:13px}.budget{margin:14px 0;padding:8px 6px;border-radius:12px;cursor:pointer}.budget:active{background:#171917}.budgetTop{display:flex;justify-content:space-between;gap:12px;font-weight:700}.backBtn{margin:0 0 14px;background:#171917;color:#fff}.detailHead{margin-bottom:12px}.detailSum{font-size:24px;font-weight:800;margin-top:5px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#161816;border-top:1px solid #343734;display:flex;justify-content:center;z-index:10;padding-bottom:env(safe-area-inset-bottom)}
+nav .inner{width:min(760px,100%);display:grid;grid-template-columns:repeat(5,1fr)}nav button{background:none;color:#aaa;border-radius:0;padding:11px 2px;font-size:12px}nav button span{display:block;font-size:21px;margin-bottom:3px}nav button.active{color:#40df72}
+.page{display:none}.page.active{display:block}.pill{display:inline-block;background:#303430;border-radius:20px;padding:7px 10px;margin:3px;font-size:13px}
+canvas{width:100%;height:180px;background:#131513;border-radius:14px;margin-top:10px}.empty{text-align:center;color:#999;padding:28px 5px}
+</style>
+</head><body><div class="app">
+<div class="head"><h1>Mein Budget</h1><div>💶</div></div>
+
+<section id="overview" class="page active">
+<div class="card"><div class="kicker">Aktueller Monat</div><div class="big" id="available">–</div><div class="muted" id="period">Noch keine Daten importiert</div></div>
+<div class="grid">
+<div class="stat"><span class="muted">Einkommen Ø</span><b id="income">–</b></div>
+<div class="stat"><span class="muted">Ausgaben aktuell</span><b id="spend">–</b></div>
+<div class="stat"><span class="muted">Sparpotenzial</span><b id="saving">–</b></div>
+<div class="stat"><span class="muted">Buchungen</span><b id="count">–</b></div>
+</div>
+<div class="card"><b>Top-Ausgaben</b><div id="topcats"></div></div>
+<div class="card"><b>Finanzguru aktualisieren</b><p class="muted">Finanzguru-Export oder Oktober-Budget-Excel auswählen. Die passende Ansicht wird automatisch übernommen.</p>
+<input id="file" type="file" accept=".xlsx,.xls"><button class="primary" onclick="doImport()">📥 Excel importieren</button><div class="muted" id="status" style="margin-top:10px"></div></div>
+</section>
+
+<section id="transactions" class="page">
+<h1>Buchungen</h1><input id="search" placeholder="🔎 Händler, Text oder Kategorie suchen" oninput="renderTransactions()">
+<select id="txfilter" onchange="renderTransactions()"><option value="all">Alle Buchungen</option><option value="expense">Nur Ausgaben</option><option value="income">Nur Einnahmen</option></select>
+<div class="card" id="txlist"></div>
+</section>
+
+<section id="analysis" class="page">
+<h1>Analyse</h1><div class="card"><b>Ausgaben nach Kategorie</b><div id="analysisCats"></div></div>
+<div class="card"><b>Monatsentwicklung</b><canvas id="chart" width="680" height="180"></canvas></div>
+</section>
+
+<section id="budgets" class="page">
+<h1>Budgets</h1><div class="card"><div class="muted">Fixkosten wie Wohnen, Versicherungen und Kredit-/Darlehensraten werden zuerst reserviert. Danach wird dein Sparziel zurückgelegt. Freizeit ist auf 200 €, Lifestyle auf 150 € und Sonstiges auf 100 € begrenzt; übriges Geld landet automatisch im Puffer.</div><div id="budgetlist"></div></div>
+</section>
+
+<section id="budgetdetail" class="page">
+<button class="backBtn" onclick="backToBudgets()">← Zurück zu Budgets</button>
+<h1 id="detailTitle">Kategorie</h1>
+<div class="card detailHead"><div class="muted">Buchungen im aktuellen Monat</div><div id="detailSum" class="detailSum">0,00 €</div><div id="detailCount" class="muted"></div></div>
+<div class="card" id="detailTx"></div>
+</section>
+
+<section id="more" class="page">
+<h1>Mehr</h1>
+<div class="card"><b>Sparziel pro Monat</b><div class="muted" style="margin:8px 0 12px">Hier kannst du dein Sparziel jederzeit ändern. Die Budgets werden sofort neu berechnet.</div><div class="row"><input id="savingTargetInput" type="number" min="0" step="10" inputmode="decimal" placeholder="z. B. 300" style="flex:1"><button class="primary" onclick="saveSavingTarget()">Speichern</button></div><div id="savingTargetStatus" class="muted" style="margin-top:10px"></div></div>
+<div class="card"><b>Fixkosten</b><div id="fixed"></div></div>
+<div class="card"><b>Verträge & Abos</b><div class="muted" style="margin:8px 0 12px">Handy, Internet, Streaming und andere regelmäßige Verträge. Erkannte Zahlungen aus dem Import werden automatisch angezeigt; fehlende Verträge kannst du manuell ergänzen.</div><div id="contracts"></div><div class="contractForm"><input id="contractName" placeholder="z. B. Vodafone Handy"><input id="contractAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="€ / Monat"><select id="contractType"><option>Handy</option><option>Internet</option><option>Streaming</option><option>Versicherung</option><option>Sonstiges</option></select><button class="primary" onclick="addContract()">+ Vertrag</button></div><div id="contractStatus" class="muted" style="margin-top:10px"></div></div>
+<div class="card"><b>Konten</b><div id="accounts"></div></div>
+<div class="card"><b>Sparen</b><div id="savings"></div></div>
+<div class="card"><button class="secondary" onclick="clearAll()">Importdaten löschen</button></div>
+</section>
+</div>
+
+<nav><div class="inner">
+<button class="active" onclick="go('overview',this)"><span>🏠</span>Übersicht</button>
+<button onclick="go('transactions',this)"><span>💳</span>Buchungen</button>
+<button onclick="go('analysis',this)"><span>📊</span>Analyse</button>
+<button onclick="go('budgets',this)"><span>💰</span>Budgets</button>
+<button onclick="go('more',this)"><span>⚙️</span>Mehr</button>
+</div></nav>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+let D=JSON.parse(localStorage.getItem('mein_budget_pro_v1')||'null');
+const eur=n=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(Number(n||0));
+const norm=v=>String(v??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const num=v=>{if(typeof v==='number')return v;let s=String(v??'').replace(/€/g,'').replace(/\s/g,'');if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');return Number(s.replace(/[^0-9.-]/g,''))||0}
+function go(id,b){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='analysis')setTimeout(drawChart,20)}
+function col(row,arr){return Object.keys(row).find(k=>arr.some(a=>norm(k).includes(norm(a))))}
+function dateOf(v){if(v instanceof Date)return v;if(typeof v==='number'){let d=XLSX.SSF.parse_date_code(v);return d?new Date(d.y,d.m-1,d.d):null}let s=String(v||''),m=s.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);let d=new Date(s);return isNaN(d)?null:d}
+function detectFixedCosts(exp){
+let variableWords=['edeka','aldi','lidl','rewe','netto','kaufland','penny','norma','aral','shell','esso','jet','star tank','tankstelle','ebay','amazon marketplace','autodoc','holy softdrinks','zigaretten','tabak','restaurant','imbiss','bäck','baeck','apotheke'];
+let fixedWords=['miete','vermieter','strom','gas','wasser','energie','stadtwerke','versicherung','huk','allianz','axa','deutsche bank','postbank','kredit','darlehen','leasing','vodafone','telekom','o2','1&1','freenet','klarmobil','congstar','internet','dsl','kabel','netflix','disney','spotify','amazon prime','prime video','sky','wow','dazn','fitness','mitgliedschaft','abo'];
+let groups={};
+(exp||[]).forEach(x=>{let name=(x.who||x.text||x.sub||'').trim();if(!name)return;let key=norm(name),g=groups[key]||(groups[key]={name,sum:0,n:0,months:{},amounts:[],cats:new Set()});let amt=Math.abs(Number(x.amount)||0),d=new Date(x.date);if(!amt||isNaN(d))return;let mk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');g.sum+=amt;g.n++;g.months[mk]=(g.months[mk]||0)+1;g.amounts.push(amt);g.cats.add(norm(x.cat));});
+return Object.values(groups).map(g=>{let months=Object.keys(g.months).length,avg=g.sum/g.n,perMonth=g.n/Math.max(months,1),vals=[...g.amounts].sort((a,b)=>a-b),median=vals[Math.floor(vals.length/2)]||0,stable=vals.filter(v=>median>0&&Math.abs(v-median)/median<=0.12).length/Math.max(vals.length,1),nameN=norm(g.name),catText=[...g.cats].join(' '),explicit=fixedWords.some(k=>nameN.includes(norm(k)))||/(wohnen|versicherung|finanzen)/.test(catText),blocked=variableWords.some(k=>nameN.includes(norm(k)))||/(essen|lebensmittel|shopping|freizeit|mobilitat|mobilitaet)/.test(catText);
+let recurring=months>=5&&perMonth<=1.6&&(stable>=0.7||explicit);
+if(blocked)return null;if(!recurring)return null;return {name:g.name,avg:median||avg,n:g.n,months,stable:Math.round(stable*100)};}).filter(Boolean).sort((a,b)=>b.avg-a.avg).slice(0,20)
+}
+function refreshFixedCostsFromStored(){if(D?.plan)return;if(!D||!Array.isArray(D.tx))return;let now=new Date(),cm=new Date(now.getFullYear(),now.getMonth(),1),start=new Date(cm.getFullYear()-1,cm.getMonth(),1);let exp=D.tx.filter(x=>{let d=new Date(x.date);return d>=start&&d<cm&&Number(x.amount)<0&&!x.transfer&&!norm(x.cat).includes('sparen')&&!norm(x.sub).includes('bargeld')&&!norm(x.text).includes('bargeld')});D.fixed=detectFixedCosts(exp);localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D))}
+function applyBudgetCaps(arr,budgetCap){let caps={freizeit:200,lifestyle:150,sonstiges:100};let out=(arr||[]).filter(x=>norm(x.name)!=='puffer').map(x=>{let cap=caps[norm(x.name)],limit=Number(x.limit)||0;if(cap!=null)limit=Math.min(limit,cap);return {...x,limit}});let allocated=out.reduce((s,x)=>s+(Number(x.limit)||0),0),buffer=Math.max(0,Math.floor((budgetCap-allocated)/10)*10);if(buffer>=10)out.push({name:'Puffer',avg:0,limit:buffer,spent:0,fixed:false,fixedFloor:0,buffer:true});return out.sort((a,b)=>b.limit-a.limit)}
+
+function importPlan(w){
+ const name=w.SheetNames.find(n=>norm(n)==='oktober-budget');if(!name)return false;
+ const rows=XLSX.utils.sheet_to_json(w.Sheets[name],{header:1,defval:''});
+ const title=rows.find(r=>/^Oktober-Budget \d{4}$/.test(String(r[0])))?.[0];
+ if(!title)throw Error('Budgettitel fehlt.');
+ const get=label=>{const row=rows.find(r=>r[0]===label&&typeof r[1]==='number');if(!row||!Number.isFinite(row[1]))throw Error('Budgetwert fehlt: '+label);return row[1]};
+ const section=(from,to)=>{let a=rows.findIndex(r=>r[0]===from),b=rows.findIndex((r,i)=>i>a&&r[0]===to);if(a<0||b<0)throw Error('Budgetabschnitt fehlt: '+from);return rows.slice(a+1,b).filter(r=>typeof r[1]==='number').map(r=>({name:r[0],amount:r[1],note:r[2]||''}))};
+ const booked=section('Bereits gebucht / Kontoverlauf','Noch erwartete Abbuchungen').filter(r=>r.name!=='Aktueller Girokontostand');
+ const pending=section('Noch erwartete Abbuchungen','Budget und Sparplan-Annahmen').filter(r=>r.name!=='Summe erwartete Fixkosten');
+ const balance=booked.reduce((t,r)=>t+r.amount,0),fixed=pending.reduce((t,r)=>t+r.amount,0);
+ D={plan:{title,stand:rows.find(r=>String(r[0]).startsWith('Stand:'))?.[0]||'',booked,pending,balance,fixed,food:get('Lebensmittelbudget'),cash:get('Erfasster Bargeldbestand'),transfer:get('Betrag je weiterer Sparüberweisung'),transferCount:get('Anzahl weiterer Sparüberweisungen')},savingTarget:get('Zusätzliches Sparen'),tx:[],months:{},fixed:pending.map(r=>({name:r.name,avg:r.amount})),budgets:[]};
+ localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));return true;
+}
+function planRows(rows){return rows.map(r=>`<div class="cat"><span>${esc(r.name)}${r.note?`<div class="muted">${esc(r.note)}</div>`:''}</span><b>${eur(r.amount)}</b></div>`).join('')}
+function planFree(){return D.plan.balance-D.plan.fixed-(D.savingTarget||0)}
+function renderPlan(){
+ const p=D.plan,free=planFree(),extra=free-p.food,paid=p.booked.filter(r=>r.amount<0&&r.name!=='Girokonto vor Oktober-Buchungen'),income=p.booked.filter(r=>r.amount>0).reduce((t,r)=>t+r.amount,0);
+ document.getElementById('income').previousElementSibling.textContent='Eingegangenes Einkommen';
+ document.getElementById('spend').previousElementSibling.textContent='Bereits bezahlte Ausgaben';
+ document.getElementById('saving').previousElementSibling.textContent='Noch erwartete Fixkosten';
+ document.getElementById('count').previousElementSibling.textContent='Lebensmittelbudget';
+ document.getElementById('available').textContent=eur(free)+' verfügbar';
+ document.getElementById('period').textContent=p.title+' · '+p.stand+' · nach erwarteten Fixkosten und zusätzlichem Sparen';
+ document.getElementById('income').textContent=eur(income);document.getElementById('spend').textContent=eur(-paid.reduce((t,r)=>t+r.amount,0));document.getElementById('saving').textContent=eur(p.fixed);document.getElementById('count').textContent=eur(p.food);
+ document.getElementById('topcats').innerHTML=planRows(paid);
+ document.getElementById('budgetlist').previousElementSibling.textContent='Übernommener Monatsplan. Lebensmittel sind vorläufig reserviert. Weitere Sparüberweisungen sind nur eine Annahme.';
+ document.getElementById('budgetlist').innerHTML=planRows([{name:'Aktueller Girokontostand',amount:p.balance},{name:'Noch erwartete Fixkosten',amount:p.fixed},{name:'Zusätzliches Sparen',amount:D.savingTarget||0},{name:'Lebensmittelbudget (vorläufig)',amount:p.food},{name:'Rest für Tanken, Zigaretten und Sonstiges',amount:extra},{name:'Rest nach '+p.transferCount+' weiteren Sparüberweisungen und Lebensmitteln',amount:extra-p.transfer*p.transferCount,note:'Szenario: keine bestätigten Abbuchungen'}]);
+ document.getElementById('analysisCats').innerHTML=planRows(paid);document.getElementById('chart').style.display='none';
+ document.getElementById('fixed').innerHTML=planRows(p.pending);document.getElementById('accounts').innerHTML=planRows([{name:'Girokonto',amount:p.balance},{name:'Bargeld separat',amount:p.cash,note:'Nicht zum Girobudget addiert'}]);
+ document.getElementById('savings').innerHTML='<div class="muted">Urlaubs- und Reparaturrücklagen sind nicht als frei verfügbares Geld eingerechnet.</div>';
+ document.getElementById('savingTargetInput').value=D.savingTarget||0;renderContracts();renderPlanTransactions();
+}
+function renderPlanTransactions(){const q=norm(document.getElementById('search')?.value||''),f=document.getElementById('txfilter')?.value||'all';const rows=D.plan.booked.filter(r=>r.name!=='Girokonto vor Oktober-Buchungen'&&r.amount!==0).filter(r=>(f==='all'||f==='income'&&r.amount>0||f==='expense'&&r.amount<0)&&(!q||norm(r.name+' '+r.note).includes(q)));document.getElementById('txlist').innerHTML=planRows(rows)||'<div class="empty">Keine Treffer</div>'}
+
+function doImport(){let f=document.getElementById('file').files[0];if(!f)return alert('Bitte Finanzguru-Excel auswählen.');if(typeof XLSX==='undefined')return alert('Excel-Bibliothek konnte nicht geladen werden. Internetverbindung prüfen.');
+let r=new FileReader();r.onload=e=>{try{let w=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});if(importPlan(w)){renderAll();document.getElementById('status').textContent='✅ Monatsbudget übernommen.';return;}let rows=XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{defval:''});if(!rows.length)throw Error('leer');
+let a=col(rows[0],['betrag']),dt=col(rows[0],['buchungstag','datum']),cat=col(rows[0],['analyse-hauptkategorie','hauptkategorie']),sub=col(rows[0],['analyse-unterkategorie','unterkategorie']),txt=col(rows[0],['verwendungszweck']),who=col(rows[0],['beguenstigter','auftraggeber']),tr=col(rows[0],['analyse-umbuchung']),acc=col(rows[0],['name referenzkonto','referenzkonto']);
+if(!a||!dt)throw Error('Spalten fehlen');
+let tx=rows.map(x=>({amount:num(x[a]),date:dateOf(x[dt]),cat:cat?String(x[cat]):'Sonstiges',sub:sub?String(x[sub]):'',text:txt?String(x[txt]):'',who:who?String(x[who]):'',transfer:tr?norm(x[tr])==='ja':false,account:acc?String(x[acc]):''})).filter(x=>x.date&&x.amount);
+let now=new Date(),cm=new Date(now.getFullYear(),now.getMonth(),1),start=new Date(cm.getFullYear()-1,cm.getMonth(),1),hist=tx.filter(x=>x.date>=start&&x.date<cm);
+let normal=x=>!x.transfer&&!norm(x.cat).includes('sparen')&&!norm(x.sub).includes('bargeld')&&!norm(x.text).includes('bargeld');
+let inc=hist.filter(x=>x.amount>0&&norm(x.cat)==='einnahmen'&&(norm(x.sub).includes('lohn')||norm(x.sub).includes('gehalt'))).reduce((s,x)=>s+x.amount,0);
+let exp=hist.filter(x=>x.amount<0&&normal(x)),cur=tx.filter(x=>x.date>=cm&&x.amount<0&&normal(x));
+let cats={},curcats={};exp.forEach(x=>cats[x.cat]=(cats[x.cat]||0)+Math.abs(x.amount));cur.forEach(x=>curcats[x.cat]=(curcats[x.cat]||0)+Math.abs(x.amount));
+let income=inc/12,SAVING_TARGET=Math.max(0,Number(localStorage.getItem('mein_budget_saving_target')??300)||0),budgetCap=Math.max(0,income-SAVING_TARGET);
+let fixedNames=['wohnen','versicherungen'];
+let loanTx=cur.filter(x=>norm(x.cat)==='finanzen'&&(norm(x.sub).includes('kredit')||norm(x.sub).includes('darlehen')||norm(x.text).includes('darlehen')||norm(x.text).includes('kredit')));
+let loanFixed=loanTx.reduce((s,x)=>s+Math.abs(x.amount),0);
+let rawBudgets=Object.keys(cats).filter(k=>cats[k]>0).map(k=>{let wholeFixed=fixedNames.some(n=>norm(k).includes(n)),floor=wholeFixed?Math.max(Math.ceil((cats[k]/12*1.05)/10)*10,Math.ceil((curcats[k]||0)/10)*10):(norm(k)==='finanzen'?Math.ceil(loanFixed/10)*10:0);let want=Math.ceil((cats[k]/12*1.05)/10)*10;return {name:k,avg:cats[k]/12,want,spent:curcats[k]||0,fixed:wholeFixed,fixedFloor:floor}});
+let fixedTotal=rawBudgets.reduce((s,x)=>s+x.fixedFloor,0),flexCap=Math.max(0,budgetCap-fixedTotal);
+let flexWant=rawBudgets.reduce((s,x)=>s+Math.max(0,x.want-x.fixedFloor),0),flexScale=flexWant>flexCap&&flexWant>0?flexCap/flexWant:1;
+let budgets=rawBudgets.map(x=>({...x,limit:x.fixedFloor+Math.floor((Math.max(0,x.want-x.fixedFloor)*flexScale)/10)*10}));
+let allocated=budgets.reduce((s,x)=>s+x.limit,0),remainder=Math.max(0,budgetCap-allocated);
+for(let i=0;budgets.length&&remainder>=10;i=(i+1)%budgets.length){if(!budgets[i].fixed){budgets[i].limit+=10;remainder-=10}}
+budgets=applyBudgetCaps(budgets.map(x=>({name:x.name,avg:x.avg,limit:x.limit,spent:x.spent,fixed:x.fixed,fixedFloor:x.fixedFloor})),budgetCap);
+let months={};hist.filter(x=>x.amount<0&&normal(x)).forEach(x=>{let k=x.date.getFullYear()+'-'+String(x.date.getMonth()+1).padStart(2,'0');months[k]=(months[k]||0)+Math.abs(x.amount)});
+let accounts=[...new Set(tx.map(x=>x.account).filter(Boolean))];
+let fixed=detectFixedCosts(exp);
+let sav=hist.filter(x=>x.amount<0&&(norm(x.cat).includes('sparen')||norm(x.sub).includes('sparen'))).reduce((s,x)=>s+Math.abs(x.amount),0);
+D={tx:tx.slice(-4000),income:income,incomeYear:inc,cats,curcats,budgets,months,accounts,fixed,saved:sav,savingTarget:SAVING_TARGET,budgetCap:budgetCap,start:start.toISOString(),end:cm.toISOString(),count:tx.length};
+localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));document.getElementById('status').textContent='✅ '+tx.length+' Buchungen importiert und alle Bereiche aktualisiert.';renderAll()}catch(err){alert('Import fehlgeschlagen: '+err.message)}};r.readAsArrayBuffer(f)}
+function recalcBudgets(target){
+if(!D)return;if(D.plan){D.savingTarget=Math.max(0,Number(target)||0);localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));return;}target=Math.max(0,Number(target)||0);let budgetCap=Math.max(0,D.income-target),fixedNames=['wohnen','versicherungen'];
+let now=new Date(),cm=new Date(now.getFullYear(),now.getMonth(),1),next=new Date(now.getFullYear(),now.getMonth()+1,1);let loanFixed=(D.tx||[]).filter(x=>{let d=new Date(x.date);return d>=cm&&d<next&&x.amount<0&&norm(x.cat)==='finanzen'&&(norm(x.sub).includes('kredit')||norm(x.sub).includes('darlehen')||norm(x.text).includes('darlehen')||norm(x.text).includes('kredit'))}).reduce((s,x)=>s+Math.abs(Number(x.amount)||0),0);
+let raw=(D.budgets||[]).filter(x=>norm(x.name)!=='puffer').map(x=>{let avg=Number(x.avg)||0,want=Math.ceil((avg*1.05)/10)*10,spent=Number(x.spent)||0,wholeFixed=x.fixed===true||fixedNames.some(n=>norm(x.name).includes(n)),floor=wholeFixed?Math.max(want,Math.ceil(spent/10)*10):(norm(x.name)==='finanzen'?Math.ceil(loanFixed/10)*10:0);return {name:x.name,avg,want,spent,fixed:wholeFixed,fixedFloor:floor}});
+let fixedTotal=raw.reduce((s,x)=>s+x.fixedFloor,0),flexCap=Math.max(0,budgetCap-fixedTotal),flexWant=raw.reduce((s,x)=>s+Math.max(0,x.want-x.fixedFloor),0),flexScale=flexWant>flexCap&&flexWant>0?flexCap/flexWant:1;
+let out=raw.map(x=>({...x,limit:x.fixedFloor+Math.floor((Math.max(0,x.want-x.fixedFloor)*flexScale)/10)*10}));let allocated=out.reduce((s,x)=>s+x.limit,0),rem=Math.max(0,budgetCap-allocated);
+for(let i=0;out.length&&rem>=10;i=(i+1)%out.length){if(!out[i].fixed){out[i].limit+=10;rem-=10}}
+D.budgets=applyBudgetCaps(out.map(x=>({name:x.name,avg:x.avg,limit:x.limit,spent:x.spent,fixed:x.fixed,fixedFloor:x.fixedFloor})),budgetCap);D.savingTarget=target;D.budgetCap=budgetCap;localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));localStorage.setItem('mein_budget_saving_target',String(target));}
+function saveSavingTarget(){let el=document.getElementById('savingTargetInput'),v=Number(el.value);if(!Number.isFinite(v)||v<0)return alert('Bitte ein Sparziel ab 0 € eingeben.');recalcBudgets(v);renderAll();let st=document.getElementById('savingTargetStatus');if(st)st.textContent='✅ Sparziel auf '+eur(v)+' pro Monat geändert.';}
+
+function manualContracts(){try{return JSON.parse(localStorage.getItem('mein_budget_contracts_v1')||'[]')}catch(e){return []}}
+function saveManualContracts(a){localStorage.setItem('mein_budget_contracts_v1',JSON.stringify(a))}
+function detectedContracts(){if(!D)return [];let kws=['mobil','handy','vodafone','telekom','o2','1&1','freenet','klarmobil','congstar','internet','dsl','kabel','netflix','disney','spotify','prime','amazon prime','sky','wow','dazn','stream'];return (D.fixed||[]).filter(x=>kws.some(k=>norm(x.name).includes(norm(k)))).map(x=>({name:x.name,amount:Number(x.avg)||0,type:'Automatisch erkannt',auto:true}))}
+function renderContracts(){let box=document.getElementById('contracts');if(!box)return;let auto=detectedContracts(),man=manualContracts();let seen=new Set(auto.map(x=>norm(x.name)));man=man.filter(x=>!seen.has(norm(x.name)));let all=[...auto,...man],total=all.reduce((s,x)=>s+(Number(x.amount)||0),0);box.innerHTML=all.length?`<div class="cat"><span><b>Monatlich gesamt</b></span><b>${eur(total)}</b></div>`+all.map((x,i)=>`<div class="contractRow row"><div class="grow"><b>${esc(x.name)}</b><div class="contractMeta">${esc(x.type||'Sonstiges')}${x.auto?' · aus Finanzguru erkannt':' · manuell'}</div></div><b>${eur(x.amount)}</b>${x.auto?'':`<button class="dangerMini" onclick="removeContract(${i-auto.length})">Löschen</button>`}</div>`).join(''):'<div class="empty">Noch keine Verträge erkannt oder eingetragen</div>'}
+function addContract(){let n=document.getElementById('contractName'),a=document.getElementById('contractAmount'),t=document.getElementById('contractType'),name=(n?.value||'').trim(),amount=Number(a?.value);if(!name||!Number.isFinite(amount)||amount<=0)return alert('Bitte Vertragsname und Monatsbetrag eingeben.');let m=manualContracts();m.push({name,amount,type:t?.value||'Sonstiges'});saveManualContracts(m);n.value='';a.value='';renderContracts();let st=document.getElementById('contractStatus');if(st)st.textContent='✅ Vertrag gespeichert.'}
+function removeContract(i){let m=manualContracts();if(i<0||i>=m.length)return;m.splice(i,1);saveManualContracts(m);renderContracts()}
+function renderAll(){if(D?.plan){renderPlan();return;}if(!D){renderContracts();return;}document.getElementById('income').previousElementSibling.textContent='Einkommen Ø';document.getElementById('spend').previousElementSibling.textContent='Ausgaben aktuell';document.getElementById('saving').previousElementSibling.textContent='Sparpotenzial';document.getElementById('count').previousElementSibling.textContent='Buchungen';document.getElementById('chart').style.display='';let inp=document.getElementById('savingTargetInput');if(inp)inp.value=D.savingTarget??Number(localStorage.getItem('mein_budget_saving_target')??300);let cur=Object.values(D.curcats||{}).reduce((a,b)=>a+b,0),limits=(D.budgets||[]).reduce((a,b)=>a+b.limit,0);
+document.getElementById('income').textContent=eur(D.income);document.getElementById('spend').textContent=eur(cur);let remaining=limits-cur;document.getElementById('available').textContent=remaining>=0?eur(remaining)+' verfügbar':eur(Math.abs(remaining))+' über Budget';document.getElementById('saving').textContent=eur(D.savingTarget??Math.max(0,D.income-limits))+' Sparziel';document.getElementById('count').textContent=D.count;
+document.getElementById('period').textContent='Budgetrahmen '+eur(limits)+' · Sparziel '+eur(D.savingTarget||0)+' · Lohn/Gehalt '+eur(D.income)+' Ø/Monat';
+let top=[...(D.budgets||[])].sort((a,b)=>b.spent-a.spent).slice(0,5);document.getElementById('topcats').innerHTML=top.map(x=>`<div class="cat"><span>${x.name}</span><b>${eur(x.spent)}</b></div>`).join('')||'<div class="empty">Noch keine Ausgaben im aktuellen Monat</div>';
+document.getElementById('budgetlist').innerHTML=(D.budgets||[]).map((x,i)=>{let diff=x.limit-x.spent,pct=x.limit?Math.min(100,x.spent/x.limit*100):0,status=diff>=0?eur(diff)+' frei':eur(Math.abs(diff))+' über Budget';return `<div class="budget" role="button" tabindex="0" data-budget-index="${i}"><div class="budgetTop"><span>${x.name} ›</span><span class="${diff<0?'neg':''}">${status}</span></div><div class="muted">${eur(x.spent)} von ${eur(x.limit)} · Ø vorher ${eur(x.avg)}</div><div class="bar"><div class="fill" style="width:${pct}%"></div></div></div>`}).join('');document.querySelectorAll('[data-budget-index]').forEach(el=>{let open=()=>openBudgetCategory(Number(el.dataset.budgetIndex));el.addEventListener('click',open);el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open()}})});
+document.getElementById('analysisCats').innerHTML=Object.entries(D.cats||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="cat"><span>${k}</span><span>${eur(v/12)} Ø/Monat</span></div>`).join('');
+document.getElementById('fixed').innerHTML=(D.fixed||[]).map(x=>`<div class="cat"><span>${x.name}</span><b>${eur(x.avg)}</b></div>`).join('')||'<div class="empty">Keine regelmäßigen Zahlungen erkannt</div>';
+document.getElementById('accounts').innerHTML=(D.accounts||[]).map(x=>`<span class="pill">${x}</span>`).join('')||'<span class="muted">Keine Kontonamen im Export</span>';
+document.getElementById('savings').innerHTML=`<div class="big">${eur(D.saved)}</div><div class="muted">Als Sparen erkannte Abflüsse im 12-Monats-Zeitraum</div>`;renderContracts();renderTransactions()}
+
+function openBudgetCategory(i){if(!D||!D.budgets||!D.budgets[i])return;let b=D.budgets[i],now=new Date(),cm=new Date(now.getFullYear(),now.getMonth(),1),next=new Date(now.getFullYear(),now.getMonth()+1,1);let arr=(D.tx||[]).filter(x=>{let d=new Date(x.date);return x.amount<0&&d>=cm&&d<next&&norm(x.cat)===norm(b.name)&&!x.transfer}).sort((a,z)=>new Date(z.date)-new Date(a.date));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('budgetdetail').classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));document.getElementById('detailTitle').textContent=b.name;let sum=arr.reduce((s,x)=>s+Math.abs(Number(x.amount)||0),0);document.getElementById('detailSum').textContent=eur(sum);document.getElementById('detailCount').textContent=arr.length+' Buchung'+(arr.length===1?'':'en')+' · Budget '+eur(b.limit);document.getElementById('detailTx').innerHTML=arr.length?arr.map(x=>`<div class="tx row"><div class="grow"><b>${esc(x.who||x.text||x.sub||x.cat)}</b><div class="muted">${new Date(x.date).toLocaleDateString('de-DE')}${x.sub?' · '+esc(x.sub):''}${x.text?' · '+esc(x.text):''}</div></div><b class="neg">${eur(Math.abs(x.amount))}</b></div>`).join(''):'<div class="empty">Keine Buchungen in dieser Kategorie im aktuellen Monat.</div>';window.scrollTo(0,0)}
+function backToBudgets(){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('budgets').classList.add('active');let btn=document.querySelector('nav button:nth-child(4)');if(btn)btn.classList.add('active');window.scrollTo(0,0)}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function renderTransactions(){if(D?.plan){renderPlanTransactions();return;}let box=document.getElementById('txlist');if(!D){box.innerHTML='<div class="empty">Noch keine Daten</div>';return}let q=norm(document.getElementById('search')?.value||''),f=document.getElementById('txfilter')?.value||'all';let arr=[...D.tx].sort((a,b)=>new Date(b.date)-new Date(a.date)).filter(x=>(f==='all'||(f==='expense'&&x.amount<0)||(f==='income'&&x.amount>0))&&(!q||norm([x.who,x.text,x.cat,x.sub].join(' ')).includes(q))).slice(0,250);box.innerHTML=arr.map(x=>`<div class="tx row"><div class="grow"><b>${x.who||x.text||x.cat}</b><div class="muted">${new Date(x.date).toLocaleDateString('de-DE')} · ${x.cat}${x.sub?' · '+x.sub:''}</div></div><b class="${x.amount<0?'neg':'pos'}">${eur(x.amount)}</b></div>`).join('')||'<div class="empty">Keine Treffer</div>'}
+function drawChart(){if(!D)return;let c=document.getElementById('chart'),ctx=c.getContext('2d'),vals=Object.entries(D.months||{}).sort().slice(-12);ctx.clearRect(0,0,c.width,c.height);if(!vals.length)return;let max=Math.max(...vals.map(x=>x[1]),1),w=c.width/vals.length;ctx.font='11px Arial';ctx.fillStyle='#aaa';vals.forEach(([m,v],i)=>{let h=v/max*125,x=i*w+8,y=145-h;ctx.fillStyle='#39df6c';ctx.fillRect(x,y,Math.max(8,w-15),h);ctx.fillStyle='#aaa';ctx.fillText(m.slice(5),x,165)})}
+function clearAll(){if(confirm('Importdaten wirklich löschen?')){localStorage.removeItem('mein_budget_pro_v1');D=null;location.reload()}}
+refreshFixedCostsFromStored();
+if(D)recalcBudgets(D.savingTarget??Number(localStorage.getItem('mein_budget_saving_target')??300));
+renderAll();
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script></body></html>
