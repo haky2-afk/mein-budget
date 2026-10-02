@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070907"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon.svg"><title>Mein Budget</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070907;color:#f4f4f4;font-family:Arial,sans-serif}
+.app{max-width:760px;margin:auto;padding:18px 16px 105px}.head{display:flex;justify-content:space-between;align-items:center}
+h1{font-size:28px;margin:8px 0 16px}.card{background:#1d201e;border-radius:22px;padding:18px;margin:12px 0}
+.kicker,.muted{color:#9c9f9d}.big{font-size:30px;font-weight:800;color:#39df6c;margin:6px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#151715;border-radius:17px;padding:15px}.stat b{display:block;font-size:21px;margin-top:5px}
+.bar{height:9px;background:#454845;border-radius:10px;overflow:hidden;margin-top:9px}.fill{height:100%;background:#36dc69;border-radius:10px}
+button{border:0;border-radius:14px;padding:13px 15px;font-weight:700;font-size:16px}.primary{background:#10c9b3;color:#032d28}.secondary{background:#3c403d;color:#fff}
+input,select{width:100%;padding:13px;border:1px solid #484b49;background:#101210;color:#fff;border-radius:12px;font-size:16px;margin:5px 0}
+.row{display:flex;gap:10px;align-items:center}.grow{flex:1}.tx{padding:12px 0;border-bottom:1px solid #343735}.tx:last-child{border:0}.neg{color:#ff8585}.pos{color:#48df76}
+.cat{display:flex;justify-content:space-between;gap:12px;margin:13px 0}.budget{margin:14px 0}.budgetTop{display:flex;justify-content:space-between;gap:12px;font-weight:700}
+nav{position:fixed;bottom:0;left:0;right:0;background:#161816;border-top:1px solid #343734;display:flex;justify-content:center;z-index:10;padding-bottom:env(safe-area-inset-bottom)}
+nav .inner{width:min(760px,100%);display:grid;grid-template-columns:repeat(5,1fr)}nav button{background:none;color:#aaa;border-radius:0;padding:11px 2px;font-size:12px}nav button span{display:block;font-size:21px;margin-bottom:3px}nav button.active{color:#40df72}
+.page{display:none}.page.active{display:block}.pill{display:inline-block;background:#303430;border-radius:20px;padding:7px 10px;margin:3px;font-size:13px}
+canvas{width:100%;height:180px;background:#131513;border-radius:14px;margin-top:10px}.empty{text-align:center;color:#999;padding:28px 5px}
+</style>
+</head><body><div class="app">
+<div class="head"><h1>Mein Budget</h1><div>💶</div></div>
+
+<section id="overview" class="page active">
+<div class="card"><div class="kicker">Aktueller Monat</div><div class="big" id="available">–</div><div class="muted" id="period">Noch keine Daten importiert</div></div>
+<div class="grid">
+<div class="stat"><span class="muted">Einkommen Ø</span><b id="income">–</b></div>
+<div class="stat"><span class="muted">Ausgaben aktuell</span><b id="spend">–</b></div>
+<div class="stat"><span class="muted">Sparpotenzial</span><b id="saving">–</b></div>
+<div class="stat"><span class="muted">Buchungen</span><b id="count">–</b></div>
+</div>
+<div class="card"><b>Top-Ausgaben</b><div id="topcats"></div></div>
+<div class="card"><b>Finanzguru aktualisieren</b><p class="muted">Originale Finanzguru-Excel auswählen. Alle Ansichten werden neu berechnet.</p>
+<input id="file" type="file" accept=".xlsx,.xls"><button class="primary" onclick="doImport()">📥 Excel importieren</button><div class="muted" id="status" style="margin-top:10px"></div></div>
+</section>
+
+<section id="transactions" class="page">
+<h1>Buchungen</h1><input id="search" placeholder="🔎 Händler, Text oder Kategorie suchen" oninput="renderTransactions()">
+<select id="txfilter" onchange="renderTransactions()"><option value="all">Alle Buchungen</option><option value="expense">Nur Ausgaben</option><option value="income">Nur Einnahmen</option></select>
+<div class="card" id="txlist"></div>
+</section>
+
+<section id="analysis" class="page">
+<h1>Analyse</h1><div class="card"><b>Ausgaben nach Kategorie</b><div id="analysisCats"></div></div>
+<div class="card"><b>Monatsentwicklung</b><canvas id="chart" width="680" height="180"></canvas></div>
+</section>
+
+<section id="budgets" class="page">
+<h1>Budgets</h1><div class="card"><div class="muted">Automatisch aus dem Durchschnitt der letzten 12 abgeschlossenen Monate + 5 % Puffer.</div><div id="budgetlist"></div></div>
+</section>
+
+<section id="more" class="page">
+<h1>Mehr</h1>
+<div class="card"><b>Fixkosten</b><div id="fixed"></div></div>
+<div class="card"><b>Konten</b><div id="accounts"></div></div>
+<div class="card"><b>Sparen</b><div id="savings"></div></div>
+<div class="card"><button class="secondary" onclick="clearAll()">Importdaten löschen</button></div>
+</section>
+</div>
+
+<nav><div class="inner">
+<button class="active" onclick="go('overview',this)"><span>🏠</span>Übersicht</button>
+<button onclick="go('transactions',this)"><span>💳</span>Buchungen</button>
+<button onclick="go('analysis',this)"><span>📊</span>Analyse</button>
+<button onclick="go('budgets',this)"><span>💰</span>Budgets</button>
+<button onclick="go('more',this)"><span>⚙️</span>Mehr</button>
+</div></nav>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+let D=JSON.parse(localStorage.getItem('mein_budget_pro_v1')||'null');
+const eur=n=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(Number(n||0));
+const norm=v=>String(v??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const num=v=>{if(typeof v==='number')return v;let s=String(v??'').replace(/€/g,'').replace(/\s/g,'');if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');return Number(s.replace(/[^0-9.-]/g,''))||0}
+function go(id,b){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='analysis')setTimeout(drawChart,20)}
+function col(row,arr){return Object.keys(row).find(k=>arr.some(a=>norm(k).includes(norm(a))))}
+function dateOf(v){if(v instanceof Date)return v;if(typeof v==='number'){let d=XLSX.SSF.parse_date_code(v);return d?new Date(d.y,d.m-1,d.d):null}let s=String(v||''),m=s.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);let d=new Date(s);return isNaN(d)?null:d}
+function doImport(){let f=document.getElementById('file').files[0];if(!f)return alert('Bitte Finanzguru-Excel auswählen.');if(typeof XLSX==='undefined')return alert('Excel-Bibliothek konnte nicht geladen werden. Internetverbindung prüfen.');
+let r=new FileReader();r.onload=e=>{try{let w=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true}),rows=XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{defval:''});if(!rows.length)throw Error('leer');
+let a=col(rows[0],['betrag']),dt=col(rows[0],['buchungstag','datum']),cat=col(rows[0],['analyse-hauptkategorie','hauptkategorie']),sub=col(rows[0],['analyse-unterkategorie','unterkategorie']),txt=col(rows[0],['verwendungszweck']),who=col(rows[0],['beguenstigter','auftraggeber']),tr=col(rows[0],['analyse-umbuchung']),acc=col(rows[0],['name referenzkonto','referenzkonto']);
+if(!a||!dt)throw Error('Spalten fehlen');
+let tx=rows.map(x=>({amount:num(x[a]),date:dateOf(x[dt]),cat:cat?String(x[cat]):'Sonstiges',sub:sub?String(x[sub]):'',text:txt?String(x[txt]):'',who:who?String(x[who]):'',transfer:tr?norm(x[tr])==='ja':false,account:acc?String(x[acc]):''})).filter(x=>x.date&&x.amount);
+let now=new Date(),cm=new Date(now.getFullYear(),now.getMonth(),1),start=new Date(cm.getFullYear()-1,cm.getMonth(),1),hist=tx.filter(x=>x.date>=start&&x.date<cm);
+let normal=x=>!x.transfer&&!norm(x.cat).includes('sparen')&&!norm(x.sub).includes('bargeld')&&!norm(x.text).includes('bargeld');
+let inc=hist.filter(x=>x.amount>0&&norm(x.cat)==='einnahmen'&&(norm(x.sub).includes('lohn')||norm(x.sub).includes('gehalt'))).reduce((s,x)=>s+x.amount,0);
+let exp=hist.filter(x=>x.amount<0&&normal(x)),cur=tx.filter(x=>x.date>=cm&&x.amount<0&&normal(x));
+let cats={},curcats={};exp.forEach(x=>cats[x.cat]=(cats[x.cat]||0)+Math.abs(x.amount));cur.forEach(x=>curcats[x.cat]=(curcats[x.cat]||0)+Math.abs(x.amount));
+let budgets=Object.keys(cats).filter(k=>cats[k]>0).map(k=>({name:k,avg:cats[k]/12,limit:Math.ceil((cats[k]/12*1.05)/10)*10,spent:curcats[k]||0})).sort((x,y)=>y.limit-x.limit);
+let months={};hist.filter(x=>x.amount<0&&normal(x)).forEach(x=>{let k=x.date.getFullYear()+'-'+String(x.date.getMonth()+1).padStart(2,'0');months[k]=(months[k]||0)+Math.abs(x.amount)});
+let accounts=[...new Set(tx.map(x=>x.account).filter(Boolean))];
+let recurring={};exp.forEach(x=>{let k=(x.who||x.text||x.sub||'Unbekannt').trim();if(!k)return;let z=recurring[k]||(recurring[k]={sum:0,n:0});z.sum+=Math.abs(x.amount);z.n++});
+let fixed=Object.entries(recurring).filter(([k,v])=>v.n>=6).map(([name,v])=>({name,avg:v.sum/v.n,n:v.n})).sort((x,y)=>y.avg-x.avg).slice(0,15);
+let sav=hist.filter(x=>x.amount<0&&(norm(x.cat).includes('sparen')||norm(x.sub).includes('sparen'))).reduce((s,x)=>s+Math.abs(x.amount),0);
+D={tx:tx.slice(-4000),income:inc/12,incomeYear:inc,cats,curcats,budgets,months,accounts,fixed,saved:sav,start:start.toISOString(),end:cm.toISOString(),count:tx.length};
+localStorage.setItem('mein_budget_pro_v1',JSON.stringify(D));document.getElementById('status').textContent='✅ '+tx.length+' Buchungen importiert und alle Bereiche aktualisiert.';renderAll()}catch(err){alert('Import fehlgeschlagen: '+err.message)}};r.readAsArrayBuffer(f)}
+function renderAll(){if(!D)return;let cur=Object.values(D.curcats||{}).reduce((a,b)=>a+b,0),limits=(D.budgets||[]).reduce((a,b)=>a+b.limit,0);
+document.getElementById('income').textContent=eur(D.income);document.getElementById('spend').textContent=eur(cur);document.getElementById('available').textContent=eur(Math.max(0,limits-cur))+' verfügbar';document.getElementById('saving').textContent=eur(Math.max(0,D.income-limits));document.getElementById('count').textContent=D.count;
+document.getElementById('period').textContent='Budgetrahmen '+eur(limits)+' · Lohn/Gehalt '+eur(D.income)+' Ø/Monat';
+let top=[...(D.budgets||[])].sort((a,b)=>b.spent-a.spent).slice(0,5);document.getElementById('topcats').innerHTML=top.map(x=>`<div class="cat"><span>${x.name}</span><b>${eur(x.spent)}</b></div>`).join('')||'<div class="empty">Noch keine Ausgaben im aktuellen Monat</div>';
+document.getElementById('budgetlist').innerHTML=(D.budgets||[]).map(x=>{let av=Math.max(0,x.limit-x.spent),pct=x.limit?Math.min(100,x.spent/x.limit*100):0;return `<div class="budget"><div class="budgetTop"><span>${x.name}</span><span>${eur(av)} frei</span></div><div class="muted">${eur(x.spent)} von ${eur(x.limit)} · Ø vorher ${eur(x.avg)}</div><div class="bar"><div class="fill" style="width:${pct}%"></div></div></div>`}).join('');
+document.getElementById('analysisCats').innerHTML=Object.entries(D.cats||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="cat"><span>${k}</span><span>${eur(v/12)} Ø/Monat</span></div>`).join('');
+document.getElementById('fixed').innerHTML=(D.fixed||[]).map(x=>`<div class="cat"><span>${x.name}</span><b>${eur(x.avg)}</b></div>`).join('')||'<div class="empty">Keine regelmäßigen Zahlungen erkannt</div>';
+document.getElementById('accounts').innerHTML=(D.accounts||[]).map(x=>`<span class="pill">${x}</span>`).join('')||'<span class="muted">Keine Kontonamen im Export</span>';
+document.getElementById('savings').innerHTML=`<div class="big">${eur(D.saved)}</div><div class="muted">Als Sparen erkannte Abflüsse im 12-Monats-Zeitraum</div>`;renderTransactions()}
+function renderTransactions(){let box=document.getElementById('txlist');if(!D){box.innerHTML='<div class="empty">Noch keine Daten</div>';return}let q=norm(document.getElementById('search')?.value||''),f=document.getElementById('txfilter')?.value||'all';let arr=[...D.tx].sort((a,b)=>new Date(b.date)-new Date(a.date)).filter(x=>(f==='all'||(f==='expense'&&x.amount<0)||(f==='income'&&x.amount>0))&&(!q||norm([x.who,x.text,x.cat,x.sub].join(' ')).includes(q))).slice(0,250);box.innerHTML=arr.map(x=>`<div class="tx row"><div class="grow"><b>${x.who||x.text||x.cat}</b><div class="muted">${new Date(x.date).toLocaleDateString('de-DE')} · ${x.cat}${x.sub?' · '+x.sub:''}</div></div><b class="${x.amount<0?'neg':'pos'}">${eur(x.amount)}</b></div>`).join('')||'<div class="empty">Keine Treffer</div>'}
+function drawChart(){if(!D)return;let c=document.getElementById('chart'),ctx=c.getContext('2d'),vals=Object.entries(D.months||{}).sort().slice(-12);ctx.clearRect(0,0,c.width,c.height);if(!vals.length)return;let max=Math.max(...vals.map(x=>x[1]),1),w=c.width/vals.length;ctx.font='11px Arial';ctx.fillStyle='#aaa';vals.forEach(([m,v],i)=>{let h=v/max*125,x=i*w+8,y=145-h;ctx.fillStyle='#39df6c';ctx.fillRect(x,y,Math.max(8,w-15),h);ctx.fillStyle='#aaa';ctx.fillText(m.slice(5),x,165)})}
+function clearAll(){if(confirm('Importdaten wirklich löschen?')){localStorage.removeItem('mein_budget_pro_v1');D=null;location.reload()}}
+renderAll();
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script></body></html>
